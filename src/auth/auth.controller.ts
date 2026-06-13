@@ -1,8 +1,9 @@
-import { Controller, Post, Body, UseGuards, Request, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Get, Body, UseGuards, Request, HttpCode, HttpStatus, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { LocalAuthGuard } from './guards/local-auth.guard';
-import { RegisterDto, MfaVerifyDto, ForgotPasswordDto } from './dto/auth.dto';
+import { RegisterDto, MfaVerifyDto, ForgotPasswordDto, ResetPasswordDto } from './dto/auth.dto';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -14,6 +15,7 @@ export class AuthController {
   register(@Body() dto: RegisterDto) { return this.authService.register(dto); }
 
   @Post('login')
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
   @UseGuards(LocalAuthGuard)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login with email and password' })
@@ -32,7 +34,21 @@ export class AuthController {
   refresh(@Body('refreshToken') refreshToken: string) { return this.authService.refreshToken(refreshToken); }
 
   @Post('forgot-password')
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Request password reset email' })
   forgotPassword(@Body() dto: ForgotPasswordDto) { return this.authService.forgotPassword(dto.email); }
+
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Reset password using token from email' })
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto.resetToken, dto.newPassword);
+  }
+
+  @Get('verify-email')
+  @ApiOperation({ summary: 'Verify email address' })
+  verifyEmail(@Query('token') token: string) {
+    return this.authService.verifyEmail(token);
+  }
 }

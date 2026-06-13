@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { UsersService } from '../users/users.service';
+import { EmailService } from '../email/email.service';
 import { User } from '../users/entities/user.entity';
 import { RegisterDto } from './dto/auth.dto';
 
@@ -13,6 +14,7 @@ export class AuthService {
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
+    private readonly emailService: EmailService,
   ) {}
 
   async validateUser(email: string, password: string): Promise<User | null> {
@@ -23,7 +25,11 @@ export class AuthService {
   }
 
   async register(dto: RegisterDto) {
-    const user = await this.usersService.create(dto);
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+    const user = await this.usersService.create({ ...dto, emailVerificationToken: verificationToken });
+    // Fire-and-forget — don't fail registration if email fails
+    this.emailService.sendWelcome(user.email, user.firstName).catch(() => null);
+    this.emailService.sendEmailVerification(user.email, verificationToken).catch(() => null);
     return this.generateTokens(user);
   }
 
@@ -53,13 +59,31 @@ export class AuthService {
     }
   }
 
-  async forgotPassword(email: string): Promise<string> {
+  async forgotPassword(email: string): Promise<{ message: string }> {
     const user = await this.usersService.findByEmail(email);
-    if (!user) return 'If the email exists, a reset link has been sent';
+    // Always return same message to avoid user enumeration
+    if (!user) return { message: 'If the email exists, a reset link has been sent' };
     const token = crypto.randomBytes(32).toString('hex');
-    // Store token on user — in production, use a separate token table
-    await this.usersService.update(user.id, {});
-    return token;
+    const expires = new Date(Date.now() + 3600 * 1000); // 1 hour
+    await this.usersService.setPasswordResetToken(user.id, token, expires);
+    this.emailService.sendPasswordReset(user.email, token).catch(() => null);
+    return { message: 'If the email exists, a reset link has been sent' };
+  }
+
+  async resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
+    const user = await this.usersService.findByResetToken(token);
+    if (!user || !user.passwordResetExpires || user.passwordResetExpires < new Date()) {
+      throw new BadRequestException('Invalid or expired reset token');
+    }
+    await this.usersService.resetPassword(user.id, newPassword);
+    return { message: 'Password reset successfully' };
+  }
+
+  async verifyEmail(token: string): Promise<{ message: string }> {
+    const user = await this.usersService.findByEmailVerificationToken(token);
+    if (!user) throw new BadRequestException('Invalid verification token');
+    await this.usersService.markEmailVerified(user.id);
+    return { message: 'Email verified successfully' };
   }
 
   private generateTokens(user: User) {

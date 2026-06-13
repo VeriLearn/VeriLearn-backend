@@ -12,6 +12,13 @@ import { UserRole } from '../users/entities/user.entity';
 export class CoursesController {
   constructor(private readonly coursesService: CoursesService) {}
 
+  // Static routes MUST come before param routes to avoid :id capturing 'my'
+  @Get('my/enrollments')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Get my enrollments' })
+  myEnrollments(@Request() req) { return this.coursesService.getEnrollments(req.user.id); }
+
   @Get()
   @ApiOperation({ summary: 'List published courses' })
   @ApiQuery({ name: 'all', required: false, type: Boolean })
@@ -69,10 +76,4 @@ export class CoursesController {
   complete(@Param('id') id: string, @Request() req) {
     return this.coursesService.completeCourse(id, req.user.id);
   }
-
-  @Get('my/enrollments')
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: 'Get my enrollments' })
-  myEnrollments(@Request() req) { return this.coursesService.getEnrollments(req.user.id); }
 }
