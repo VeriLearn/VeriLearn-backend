@@ -29,7 +29,10 @@ coverage/
 Thumbs.db
 
 # Storage
-storage/
+storage/*
+!storage/videos/
+storage/videos/*
+!storage/videos/.gitkeep
 
 # TypeORM
 ormconfig.json

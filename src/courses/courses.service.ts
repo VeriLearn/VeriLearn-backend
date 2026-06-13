@@ -97,6 +97,26 @@ export class CoursesService {
     return saved;
   }
 
+  async updateLesson(courseId: string, lessonId: string, dto: Partial<CreateLessonDto>, userId: string, role: UserRole): Promise<Lesson> {
+    const course = await this.findById(courseId);
+    if (course.instructorId !== userId && role !== UserRole.ADMIN) throw new ForbiddenException();
+    const lesson = await this.lessonRepo.findOne({ where: { id: lessonId, courseId } });
+    if (!lesson) throw new NotFoundException('Lesson not found');
+    Object.assign(lesson, dto);
+    const saved = await this.lessonRepo.save(lesson);
+    await this.cache.del(courseKey(courseId));
+    return saved;
+  }
+
+  async removeLesson(courseId: string, lessonId: string, userId: string, role: UserRole): Promise<void> {
+    const course = await this.findById(courseId);
+    if (course.instructorId !== userId && role !== UserRole.ADMIN) throw new ForbiddenException();
+    const lesson = await this.lessonRepo.findOne({ where: { id: lessonId, courseId } });
+    if (!lesson) throw new NotFoundException('Lesson not found');
+    await this.lessonRepo.remove(lesson);
+    await this.cache.del(courseKey(courseId));
+  }
+
   async enroll(courseId: string, userId: string): Promise<Enrollment> {
     const course = await this.findById(courseId);
     if (course.status !== CourseStatus.PUBLISHED) throw new ForbiddenException('Course not available');

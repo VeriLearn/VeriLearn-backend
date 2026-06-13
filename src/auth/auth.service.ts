@@ -45,9 +45,19 @@ export class AuthService {
 
   async verifyMfaAndLogin(userId: string, token: string) {
     const valid = await this.usersService.verifyMfaToken(userId, token);
-    if (!valid) throw new UnauthorizedException('Invalid MFA token');
+    if (!valid) {
+      this.monitoring.audit({ userId, action: 'MFA_FAILED', resource: 'auth', success: false }).catch(() => null);
+      throw new UnauthorizedException('Invalid MFA token');
+    }
     const user = await this.usersService.findById(userId);
+    this.monitoring.audit({ userId, action: 'MFA_LOGIN', resource: 'auth', success: true }).catch(() => null);
     return this.generateTokens(user);
+  }
+
+  async logout(userId: string): Promise<{ message: string }> {
+    // Stateless JWT — instruct client to discard. Log the action.
+    this.monitoring.audit({ userId, action: 'LOGOUT', resource: 'auth', success: true }).catch(() => null);
+    return { message: 'Logged out successfully' };
   }
 
   async refreshToken(refreshToken: string) {

@@ -37,6 +37,7 @@ async function bootstrap() {
 
   const port = config.get<number>('PORT', 3000);
   await app.listen(port);
+  app.enableShutdownHooks();
   console.log(`VeriLearn backend running on port ${port}`);
 }
 bootstrap();
