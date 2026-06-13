@@ -6,10 +6,14 @@ import { authenticator } from 'otplib';
 import * as qrcode from 'qrcode';
 import { User } from './entities/user.entity';
 import { CreateUserDto, UpdateUserDto, ChangePasswordDto } from './dto/user.dto';
+import { MonitoringService } from '../monitoring/monitoring.service';
 
 @Injectable()
 export class UsersService {
-  constructor(@InjectRepository(User) private readonly repo: Repository<User>) {}
+  constructor(
+    @InjectRepository(User) private readonly repo: Repository<User>,
+    private readonly monitoring: MonitoringService,
+  ) {}
 
   async create(dto: CreateUserDto & { emailVerificationToken?: string }): Promise<User> {
     const exists = await this.repo.findOne({ where: { email: dto.email } });
@@ -19,8 +23,9 @@ export class UsersService {
     return this.repo.save(user);
   }
 
-  async findAll(): Promise<User[]> {
-    return this.repo.find();
+  async findAll(page = 1, limit = 20): Promise<{ data: User[]; total: number; page: number; limit: number }> {
+    const [data, total] = await this.repo.findAndCount({ skip: (page - 1) * limit, take: limit });
+    return { data, total, page, limit };
   }
 
   async findById(id: string): Promise<User> {
@@ -66,6 +71,7 @@ export class UsersService {
     if (!valid) throw new BadRequestException('Current password is incorrect');
     user.password = await bcrypt.hash(dto.newPassword, 12);
     await this.repo.save(user);
+    this.monitoring.audit({ userId: id, action: 'CHANGE_PASSWORD', resource: 'user', success: true }).catch(() => null);
   }
 
   async remove(id: string): Promise<void> {

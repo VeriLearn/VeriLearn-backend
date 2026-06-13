@@ -1,5 +1,6 @@
 import { Controller, Get, Query, UseGuards, Res, Request } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import { Response } from 'express';
 import { MonitoringService } from './monitoring.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -12,6 +13,7 @@ import { UserRole } from '../users/entities/user.entity';
 export class MonitoringController {
   constructor(private readonly monitoringService: MonitoringService) {}
 
+  @SkipThrottle()
   @Get('metrics')
   @ApiOperation({ summary: 'Prometheus metrics endpoint' })
   async metrics(@Res() res: Response) {

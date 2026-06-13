@@ -4,6 +4,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as StellarSdk from '@stellar/stellar-sdk';
 import { Credential } from './entities/credential.entity';
+import { Enrollment } from '../courses/entities/course.entity';
+import { MonitoringService } from '../monitoring/monitoring.service';
 
 @Injectable()
 export class BlockchainService {
@@ -15,6 +17,8 @@ export class BlockchainService {
   constructor(
     private readonly config: ConfigService,
     @InjectRepository(Credential) private readonly credentialRepo: Repository<Credential>,
+    @InjectRepository(Enrollment) private readonly enrollmentRepo: Repository<Enrollment>,
+    private readonly monitoring: MonitoringService,
   ) {
     const horizonUrl = config.get<string>('stellar.horizonUrl');
     this.network = config.get<string>('stellar.network');
@@ -57,12 +61,16 @@ export class BlockchainService {
         isVerified: true,
         metadata,
       });
-      return this.credentialRepo.save(credential);
+      const saved = await this.credentialRepo.save(credential);
+      await this.enrollmentRepo.update({ courseId, userId }, { credentialTxHash: result.hash });
+      this.monitoring.audit({ userId, action: 'ISSUE_CREDENTIAL', resource: 'credential', resourceId: saved.id, success: true }).catch(() => null);
+      return saved;
     } catch (err) {
       this.logger.error('Failed to issue credential', err);
-      // Save unverified credential for retry
       const credential = this.credentialRepo.create({ userId, courseId, stellarPublicKey, isVerified: false });
-      return this.credentialRepo.save(credential);
+      const saved = await this.credentialRepo.save(credential);
+      this.monitoring.audit({ userId, action: 'ISSUE_CREDENTIAL_FAILED', resource: 'credential', resourceId: saved.id, success: false }).catch(() => null);
+      return saved;
     }
   }
 

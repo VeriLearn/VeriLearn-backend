@@ -11,6 +11,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
     restart: unless-stopped
 
   postgres:
@@ -51,6 +53,12 @@ services:
       - '9200:9200'
     volumes:
       - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -s http://localhost:9200/_cluster/health || exit 1']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
 volumes:
   postgres_data:

@@ -4,6 +4,7 @@ import { ConflictException, NotFoundException, BadRequestException } from '@nest
 import * as bcrypt from 'bcrypt';
 import { UsersService } from './users.service';
 import { User, UserRole } from './entities/user.entity';
+import { MonitoringService } from '../monitoring/monitoring.service';
 
 const mockUser: Partial<User> = {
   id: 'user-1',
@@ -34,6 +35,7 @@ describe('UsersService', () => {
       providers: [
         UsersService,
         { provide: getRepositoryToken(User), useValue: mockRepo },
+        { provide: MonitoringService, useValue: { audit: jest.fn().mockResolvedValue(undefined) } },
       ],
     }).compile();
 

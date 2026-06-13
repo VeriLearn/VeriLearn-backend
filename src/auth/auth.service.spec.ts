@@ -6,6 +6,7 @@ import * as bcrypt from 'bcrypt';
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
 import { EmailService } from '../email/email.service';
+import { MonitoringService } from '../monitoring/monitoring.service';
 import { UserRole } from '../users/entities/user.entity';
 
 const mockUser = {
@@ -58,6 +59,10 @@ describe('AuthService', () => {
             sendEmailVerification: jest.fn().mockResolvedValue(undefined),
             sendPasswordReset: jest.fn().mockResolvedValue(undefined),
           },
+        },
+        {
+          provide: MonitoringService,
+          useValue: { audit: jest.fn().mockResolvedValue(undefined) },
         },
       ],
     }).compile();

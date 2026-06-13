@@ -30,6 +30,7 @@ const mockEnrollment = {
 const mockCourseRepo = {
   find: jest.fn(),
   findOne: jest.fn(),
+  findAndCount: jest.fn(),
   create: jest.fn(),
   save: jest.fn(),
   remove: jest.fn(),
@@ -52,6 +53,7 @@ const mockCache = {
   get: jest.fn(),
   set: jest.fn(),
   del: jest.fn(),
+  store: { keys: jest.fn().mockResolvedValue([]) },
 };
 
 const mockSearchService = {
@@ -84,7 +86,7 @@ describe('CoursesService', () => {
     it('creates course and indexes in ES', async () => {
       mockCourseRepo.create.mockReturnValue(mockCourse);
       mockCourseRepo.save.mockResolvedValue(mockCourse);
-      mockCache.del.mockResolvedValue(undefined);
+      mockCache.store.keys.mockResolvedValue([]);
 
       const result = await service.create(
         { title: 'Stellar Basics', description: 'Learn Stellar blockchain' } as any,
@@ -92,27 +94,31 @@ describe('CoursesService', () => {
       );
 
       expect(result).toEqual(mockCourse);
-      expect(mockCache.del).toHaveBeenCalledWith('courses:all');
+      expect(mockCache.store.keys).toHaveBeenCalledWith('courses:all:*');
       expect(mockSearchService.indexDocument).toHaveBeenCalledWith('courses', 'course-1', expect.any(Object));
     });
   });
 
   describe('findAll', () => {
     it('returns cached value when cache hit', async () => {
-      mockCache.get.mockResolvedValue([mockCourse]);
+      const cached = { data: [mockCourse], total: 1, page: 1, limit: 20 };
+      mockCache.get.mockResolvedValue(cached);
       const result = await service.findAll();
-      expect(result).toEqual([mockCourse]);
-      expect(mockCourseRepo.find).not.toHaveBeenCalled();
+      expect(result).toEqual(cached);
+      expect(mockCourseRepo.findAndCount).not.toHaveBeenCalled();
     });
 
     it('queries DB and caches result on cache miss', async () => {
       mockCache.get.mockResolvedValue(null);
-      mockCourseRepo.find.mockResolvedValue([mockCourse]);
+      mockCourseRepo.findAndCount.mockResolvedValue([[mockCourse], 1]);
       mockCache.set.mockResolvedValue(undefined);
 
       const result = await service.findAll();
-      expect(result).toEqual([mockCourse]);
-      expect(mockCache.set).toHaveBeenCalledWith('courses:all', [mockCourse], 300);
+      expect(result.data).toEqual([mockCourse]);
+      expect(result.total).toBe(1);
+      expect(result.page).toBe(1);
+      expect(result.limit).toBe(20);
+      expect(mockCache.set).toHaveBeenCalled();
     });
   });
 
@@ -153,16 +159,18 @@ describe('CoursesService', () => {
       mockCache.get.mockResolvedValue(mockCourse);
       mockCourseRepo.save.mockResolvedValue({ ...mockCourse, title: 'Updated' });
       mockCache.del.mockResolvedValue(undefined);
+      mockCache.store.keys.mockResolvedValue([]);
 
       const result = await service.update('course-1', { title: 'Updated' }, 'user-1', UserRole.INSTRUCTOR);
       expect(result.title).toBe('Updated');
-      expect(mockCache.del).toHaveBeenCalledTimes(2);
+      expect(mockCache.del).toHaveBeenCalledWith('courses:course-1');
     });
 
     it('allows admin to update any course', async () => {
       mockCache.get.mockResolvedValue(mockCourse);
       mockCourseRepo.save.mockResolvedValue({ ...mockCourse, title: 'Admin Updated' });
       mockCache.del.mockResolvedValue(undefined);
+      mockCache.store.keys.mockResolvedValue([]);
 
       const result = await service.update('course-1', { title: 'Admin Updated' }, 'admin-id', UserRole.ADMIN);
       expect(result.title).toBe('Admin Updated');

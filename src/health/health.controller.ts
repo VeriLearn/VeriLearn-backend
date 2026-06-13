@@ -1,5 +1,6 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -28,6 +29,7 @@ export class HealthController {
     });
   }
 
+  @SkipThrottle()
   @Get()
   @ApiOperation({ summary: 'Health check with DB, Redis, and Elasticsearch status' })
   async check() {

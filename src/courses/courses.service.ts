@@ -26,10 +26,15 @@ export class CoursesService {
     private readonly usersService: UsersService,
   ) {}
 
+  private async invalidateCourseListCache(): Promise<void> {
+    const keys = await this.cache.store.keys(`${ALL_COURSES_KEY}:*`);
+    await Promise.all(keys.map((k) => this.cache.del(k)));
+  }
+
   async create(dto: CreateCourseDto, instructorId: string): Promise<Course> {
     const course = this.courseRepo.create({ ...dto, instructorId });
     const saved = await this.courseRepo.save(course);
-    await this.cache.del(ALL_COURSES_KEY);
+    await this.invalidateCourseListCache();
     this.searchService.indexDocument('courses', saved.id, {
       title: saved.title, description: saved.description,
       category: saved.category, tags: saved.tags, status: saved.status,
@@ -37,13 +42,20 @@ export class CoursesService {
     return saved;
   }
 
-  async findAll(published = true): Promise<Course[]> {
-    const cached = await this.cache.get<Course[]>(ALL_COURSES_KEY);
+  async findAll(published = true, page = 1, limit = 20): Promise<{ data: Course[]; total: number; page: number; limit: number }> {
+    const cacheKey = `${ALL_COURSES_KEY}:${published}:${page}:${limit}`;
+    const cached = await this.cache.get<{ data: Course[]; total: number; page: number; limit: number }>(cacheKey);
     if (cached) return cached;
     const where = published ? { status: CourseStatus.PUBLISHED } : {};
-    const courses = await this.courseRepo.find({ where, relations: ['instructor'] });
-    await this.cache.set(ALL_COURSES_KEY, courses, CACHE_TTL);
-    return courses;
+    const [data, total] = await this.courseRepo.findAndCount({
+      where,
+      relations: ['instructor'],
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+    const result = { data, total, page, limit };
+    await this.cache.set(cacheKey, result, CACHE_TTL);
+    return result;
   }
 
   async findById(id: string): Promise<Course> {
@@ -60,7 +72,7 @@ export class CoursesService {
     if (course.instructorId !== userId && role !== UserRole.ADMIN) throw new ForbiddenException();
     Object.assign(course, dto);
     const saved = await this.courseRepo.save(course);
-    await Promise.all([this.cache.del(courseKey(id)), this.cache.del(ALL_COURSES_KEY)]);
+    await Promise.all([this.cache.del(courseKey(id)), this.invalidateCourseListCache()]);
     this.searchService.indexDocument('courses', id, {
       title: saved.title, description: saved.description,
       category: saved.category, tags: saved.tags, status: saved.status,
@@ -72,7 +84,7 @@ export class CoursesService {
     const course = await this.findById(id);
     if (course.instructorId !== userId && role !== UserRole.ADMIN) throw new ForbiddenException();
     await this.courseRepo.remove(course);
-    await Promise.all([this.cache.del(courseKey(id)), this.cache.del(ALL_COURSES_KEY)]);
+    await Promise.all([this.cache.del(courseKey(id)), this.invalidateCourseListCache()]);
     this.searchService.deleteDocument('courses', id).catch(() => null);
   }
 

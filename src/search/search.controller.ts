@@ -1,5 +1,6 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import { SearchService } from './search.service';
 
 @ApiTags('search')
@@ -7,6 +8,7 @@ import { SearchService } from './search.service';
 export class SearchController {
   constructor(private readonly searchService: SearchService) {}
 
+  @SkipThrottle()
   @Get('courses')
   @ApiOperation({ summary: 'Full-text search courses' })
   @ApiQuery({ name: 'q', required: true })

@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ForbiddenException, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -12,7 +12,7 @@ export interface StreamToken {
 }
 
 @Injectable()
-export class VideoStreamingService {
+export class VideoStreamingService implements OnModuleInit {
   private readonly logger = new Logger(VideoStreamingService.name);
   private readonly storageBase: string;
   private readonly tokenSecret: string;
@@ -21,6 +21,13 @@ export class VideoStreamingService {
   constructor(private readonly config: ConfigService) {
     this.storageBase = config.get<string>('VIDEO_STORAGE_PATH', './storage/videos');
     this.tokenSecret = config.get<string>('VIDEO_TOKEN_SECRET', 'video-secret-change-me');
+  }
+
+  onModuleInit() {
+    if (!fs.existsSync(this.storageBase)) {
+      fs.mkdirSync(this.storageBase, { recursive: true });
+      this.logger.log('Video storage directory created');
+    }
   }
 
   generateStreamToken(lessonId: string, userId: string): string {
